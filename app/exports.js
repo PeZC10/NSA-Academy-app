@@ -89,15 +89,14 @@ function crearExamenNSC() {
 }
 
 // ---- Microsoft Forms-compatible DOCX generator ----
-// Microsoft Forms importa quizzes desde Word con este formato específico:
-//  Pregunta
-//  *Opción correcta  (asterisco al inicio marca la correcta)
-//   Opción incorrecta
-//   Opción incorrecta
-// Las preguntas se separan con líneas en blanco.
-// Ref: https://support.microsoft.com/en-us/office/import-questions-into-microsoft-forms
+// Microsoft Forms "Quick Import" detecta preguntas de opción múltiple cuando:
+//  - Cada pregunta está numerada (1., 2., 3., …)
+//  - Cada opción está en su propia línea, prefijada con letra y punto (A., B., C., D.)
+//  - La respuesta correcta se indica en una línea "Answer: X" después de las opciones
+// Si no hay prefijos de letra en las opciones, Forms las interpreta como pregunta
+// de texto abierto en vez de opción múltiple.
+// Ref: https://support.microsoft.com/en-us/office/66b7e9bc-eb0d-4c65-b7e6-f9f92dcd71cb
 async function toMicrosoftFormsDocx(exam) {
-  // Load docx library dynamically
   if (!window.docx) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -108,10 +107,10 @@ async function toMicrosoftFormsDocx(exam) {
     });
   }
   const { Document, Packer, Paragraph, TextRun, HeadingLevel } = window.docx;
+  const LETTERS = ['A','B','C','D','E','F'];
 
   const children = [];
 
-  // Title + header
   children.push(new Paragraph({
     text: exam.name,
     heading: HeadingLevel.HEADING_1,
@@ -124,30 +123,39 @@ async function toMicrosoftFormsDocx(exam) {
     children: [new TextRun({ text: 'Instrucciones para importar a Microsoft Forms:', bold: true, size: 20 })],
   }));
   children.push(new Paragraph({
-    children: [new TextRun({ text: '1. Abre https://forms.office.com y crea un nuevo Quiz.', size: 20 })],
+    children: [new TextRun({ text: '1. Abre https://forms.office.com y crea un nuevo Quiz (Cuestionario).', size: 20 })],
   }));
   children.push(new Paragraph({
-    children: [new TextRun({ text: '2. Clic en "Importar preguntas" → selecciona este archivo .docx.', size: 20 })],
+    children: [new TextRun({ text: '2. Clic en "Importación rápida" (Quick Import) y selecciona este archivo .docx.', size: 20 })],
   }));
   children.push(new Paragraph({
-    children: [new TextRun({ text: '3. Forms detectará automáticamente las preguntas y la respuesta correcta (marcada con *).', size: 20 })],
+    children: [new TextRun({ text: '3. Forms detectará las preguntas como opción múltiple gracias a los prefijos A./B./C./D.', size: 20 })],
+  }));
+  children.push(new Paragraph({
+    children: [new TextRun({ text: '4. Revisa las respuestas correctas (indicadas en las líneas "Answer:") y márcalas en Forms si es necesario.', size: 20 })],
   }));
   children.push(new Paragraph({ text: '' }));
   children.push(new Paragraph({ text: '— — — — — — — — — —' }));
   children.push(new Paragraph({ text: '' }));
 
   exam.questions.forEach((q, i) => {
-    // Question line
     children.push(new Paragraph({
       children: [new TextRun({ text: `${i + 1}. ${q.question}`, bold: true })],
     }));
-    q.options.forEach(opt => {
-      const prefix = opt.correct ? '*' : '';
+    let correctLetter = '';
+    q.options.forEach((opt, j) => {
+      const letter = LETTERS[j] || '?';
+      if (opt.correct) correctLetter = letter;
       children.push(new Paragraph({
-        text: `${prefix}${opt.text}`,
+        text: `${letter}. ${opt.text}`,
       }));
     });
-    children.push(new Paragraph({ text: '' })); // blank line between questions
+    if (correctLetter) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `Answer: ${correctLetter}`, italics: true })],
+      }));
+    }
+    children.push(new Paragraph({ text: '' }));
   });
 
   const doc = new Document({
@@ -156,6 +164,35 @@ async function toMicrosoftFormsDocx(exam) {
 
   const blob = await Packer.toBlob(doc);
   return blob;
+}
+
+// Print via hidden iframe — works in both Electron (where window.open is
+// intercepted by the window-open handler) and regular browsers (where popup
+// blockers can kill window.open). Writes HTML into an off-screen iframe and
+// triggers its contentWindow.print().
+function printViaIframe(html) {
+  const existing = document.getElementById('__print_frame');
+  if (existing) existing.remove();
+
+  const iframe = document.createElement('iframe');
+  iframe.id = '__print_frame';
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (err) {
+      console.error('Print failed:', err);
+    }
+  }, 300);
 }
 
 // ---- CSV generator (bonus) ----
@@ -239,5 +276,5 @@ function downloadText(content, filename, mime = 'text/plain') {
 
 Object.assign(window, {
   shuffle, buildExam, toGoogleAppsScript, toMicrosoftFormsDocx,
-  toCSV, toPrintableHTML, downloadBlob, downloadText,
+  toCSV, toPrintableHTML, printViaIframe, downloadBlob, downloadText,
 });

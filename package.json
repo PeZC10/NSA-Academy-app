@@ -1,6 +1,6 @@
 {
   "name": "nsc-academy",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "NSC Academy — Generador de Exámenes",
   "author": "NSC",
   "main": "main.js",

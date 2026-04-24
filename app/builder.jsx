@@ -92,11 +92,7 @@ function ExamBuilder({ bank, open, onClose }) {
         } else if (kind === 'csv') {
           downloadText(toCSV(exam), `${safeName}.csv`, 'text/csv');
         } else if (kind === 'print') {
-          const html = toPrintableHTML(exam);
-          const w = window.open('', '_blank');
-          w.document.write(html);
-          w.document.close();
-          setTimeout(() => w.print(), 400);
+          printViaIframe(toPrintableHTML(exam));
         }
       } catch (err) {
         alert('Error al exportar: ' + err.message);
