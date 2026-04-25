@@ -14,17 +14,19 @@ function ExamBuilder({ bank, open, onClose }) {
 
   // Topics filtered by level (if level picked) else all topics with questions
   const availableTopics = useMemoB(() => {
-    const allInBank = [...new Set(bank.map(q => q.topic))];
-    if (!selectedLevel) return allInBank;
-    const allowed = getAllowedTopics(selectedLevel);
-    return allInBank.filter(t => allowed.includes(t));
+    if (!selectedLevel) return [...new Set(bank.map(q => q.topic))];
+    return getAllowedTopics(selectedLevel, bank);
   }, [selectedLevel, bank]);
 
+  // Per-topic counts respect the selected level so the chip numbers match the exam pool.
   const countByTopic = useMemoB(() => {
     const c = {};
-    bank.forEach(q => { c[q.topic] = (c[q.topic] || 0) + 1; });
+    bank.forEach(q => {
+      if (selectedLevel && !(Array.isArray(q.audiences) && q.audiences.includes(selectedLevel))) return;
+      c[q.topic] = (c[q.topic] || 0) + 1;
+    });
     return c;
-  }, [bank]);
+  }, [bank, selectedLevel]);
 
   const totalAvailable = useMemoB(() => {
     return [...selectedTopics].reduce((sum, t) => sum + (countByTopic[t] || 0), 0);
@@ -55,6 +57,7 @@ function ExamBuilder({ bank, open, onClose }) {
       topics: [...selectedTopics],
       count,
       shuffleOptions: shuffleOpts,
+      level: selectedLevel || null,
     });
     setExam(e);
     setStep('export');

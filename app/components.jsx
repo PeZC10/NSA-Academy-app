@@ -33,7 +33,9 @@ function TopicList({ level, topics, bank, selectedTopic, onSelectTopic, query, s
     })).filter(g => g.topics.length > 0);
   }, [topics]);
 
-  const countFor = (topic) => bank.filter(q => q.topic === topic).length;
+  const countFor = (topic) => bank.filter(q =>
+    q.topic === topic && Array.isArray(q.audiences) && q.audiences.includes(level)
+  ).length;
 
   const q = (query || '').toLowerCase().trim();
 
@@ -219,8 +221,8 @@ function App({ bank }) {
   const [query, setQuery] = useState('');
   const [builderOpen, setBuilderOpen] = useState(false);
 
-  const topics = useMemo(() => level ? getAllowedTopics(level) : [], [level]);
-  const questions = useMemo(() => topic ? getQuestionsForTopic(bank, topic) : [], [topic, bank]);
+  const topics = useMemo(() => level ? getAllowedTopics(level, bank) : [], [level, bank]);
+  const questions = useMemo(() => topic ? getQuestionsForTopic(bank, topic, level) : [], [topic, bank, level]);
 
   // When level changes, clear topic if not valid
   useEffect(() => {
@@ -230,8 +232,8 @@ function App({ bank }) {
   const totalQuestions = bank.length;
   const levelQuestionCount = useMemo(() => {
     if (!level) return 0;
-    return topics.reduce((sum, t) => sum + bank.filter(q => q.topic === t).length, 0);
-  }, [level, topics, bank]);
+    return bank.filter(q => Array.isArray(q.audiences) && q.audiences.includes(level)).length;
+  }, [level, bank]);
 
   return (
     <div className="app">

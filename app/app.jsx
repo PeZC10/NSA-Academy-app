@@ -1,55 +1,19 @@
 // NSC Academy — Generador de Exámenes
-// Matrix of which topics apply to each employee level
+// Filtering is now driven by per-question `audiences` arrays
+// (see app/data/questions.json) rather than a topic-level matrix.
 
 const LEVELS = [
-  { id: 'NI',    name: 'Nuevo Ingreso',      short: 'NI',    desc: 'Incorporación reciente' },
-  { id: 'GEN',   name: 'General',            short: 'GEN',   desc: 'Personal general de NSC' },
-  { id: 'ASIST', name: 'Asistente',          short: 'ASIST', desc: 'Asistente de asesoría' },
-  { id: 'INT',   name: 'Intern / Trainee',   short: 'INT',   desc: 'Programa de trainees' },
-  { id: 'JR',    name: 'Asesor Jr',          short: 'JR',    desc: 'Asesor financiero junior' },
-  { id: 'SR',    name: 'Asesor Sr',          short: 'SR',    desc: 'Asesor financiero senior' },
-  { id: 'DIR',   name: 'Director',           short: 'DIR',   desc: 'Dirección' },
-  { id: 'ASOC', name: 'Director Asociado',  short: 'ASOC', desc: 'Dirección asociada' },
+  { id: 'NIG', name: 'Nuevo Ingreso General', short: 'NIG', desc: 'Incorporación reciente' },
+  { id: 'AST', name: 'Asistente',             short: 'AST', desc: 'Asistente de asesoría' },
+  { id: 'INT', name: 'Intern / Trainee',      short: 'INT', desc: 'Programa de trainees' },
+  { id: 'ASJ', name: 'Asesor Jr',             short: 'ASJ', desc: 'Asesor financiero junior' },
+  { id: 'ASS', name: 'Asesor Sr',             short: 'ASS', desc: 'Asesor financiero senior' },
+  { id: 'DIR', name: 'Director',              short: 'DIR', desc: 'Dirección' },
+  { id: 'DAS', name: 'Director Asociado',     short: 'DAS', desc: 'Dirección asociada' },
 ];
 
-// Matrix: for each topic, which levels it applies to (exactly as the user's table)
-const MATRIX = [
-  { topic: 'Historia de NSC',               levels: ['NI','GEN','ASIST','INT'] },
-  { topic: 'NSC Hoy',                       levels: ['NI','GEN','ASIST','INT'] },
-  { topic: 'Asesores Financieros y Bancos', levels: ['NI','GEN','ASIST','INT'] },
-  { topic: 'Asesor Independiente',          levels: ['NI','GEN','ASIST','INT'] },
-  { topic: 'Matemáticas Financieras',       levels: ['GEN','ASIST','INT','JR'] },
-  { topic: 'Calculadora Financiera',        levels: ['ASIST','INT'] },
-  { topic: 'Economía',                      levels: ['GEN','ASIST','INT','JR','SR'] },
-  { topic: 'Renta Fija',                    levels: ['GEN','ASIST','INT','JR','SR','DIR','ASOC'] },
-  { topic: 'Renta Variable',                levels: ['GEN','ASIST','INT','JR','SR','DIR','ASOC'] },
-  { topic: 'Análisis Estados Financieros',  levels: ['ASIST','INT','JR'] },
-  { topic: 'Gestión de Portafolio',         levels: ['JR','SR','DIR','ASOC'] },
-  { topic: 'Derivados',                     levels: ['JR','SR','DIR','ASOC'] },
-  { topic: 'Bloomberg',                     levels: ['GEN'] },
-  { topic: 'Excel',                         levels: ['INT','JR','SR'] },
-  { topic: 'Conceptos Fiscales',            levels: ['GEN','ASIST','INT','JR','SR','DIR','ASOC'] },
-  { topic: 'Productos de Inversión',        levels: ['ASIST','INT'] },
-  { topic: 'Trading',                       levels: ['GEN','ASIST','INT'] },
-  { topic: 'Alternativos (General)',        levels: ['ASIST','INT'] },
-  { topic: 'Private Equity',                levels: ['ASIST','INT'] },
-  { topic: 'Private Credit',                levels: ['ASIST','INT'] },
-  { topic: 'Bienes Raíces',                 levels: ['ASIST','INT'] },
-  { topic: 'Infraestructura',               levels: ['ASIST','INT'] },
-  { topic: 'Real Assets y Recursos Nat.',   levels: ['ASIST','INT'] },
-  { topic: 'Hedge Funds',                   levels: ['ASIST','INT'] },
-  { topic: 'Activos Digitales',             levels: ['ASIST','INT'] },
-  { topic: 'Imagen Corporativa',            levels: ['NI','GEN','ASIST','INT'] },
-  { topic: 'Técnicas de Comunicación',      levels: ['GEN','ASIST','INT'] },
-  { topic: 'Atención a Clientes',           levels: ['GEN','ASIST','INT'] },
-  { topic: 'Ética',                         levels: ['NI','GEN','ASIST','INT','JR','SR','DIR','ASOC'] },
-  { topic: 'Servicios de Inversión',        levels: ['GEN','ASIST','INT','JR','SR','DIR','ASOC'] },
-  { topic: 'Marco Legal',                   levels: ['GEN','ASIST','INT','DIR','ASOC'] },
-  { topic: 'Tesorería',                     levels: ['GEN','ASIST','INT'] },
-  { topic: 'PLD',                           levels: ['NI','GEN','ASIST','INT','JR','SR','DIR','ASOC'] },
-];
-
-// Topic groupings — for visual organization on the left panel
+// Topic groupings — visual organization on the left panel.
+// Topics that don't appear in the bank are silently skipped at render time.
 const TOPIC_GROUPS = [
   {
     id: 'institucional',
@@ -74,28 +38,50 @@ const TOPIC_GROUPS = [
   {
     id: 'portafolios',
     label: 'Portafolios y Servicio',
-    topics: ['Gestión de Portafolio','Servicios de Inversión','Atención a Clientes','Técnicas de Comunicación'],
+    topics: [
+      'Gestión de Portafolio',
+      'Conceptos y Disposiciones de Prácticas de Venta',
+      'Diferencias entre Gestión y Asesoría',
+      'Comité de Análisis y Perfiles de Inversión de Riesgo',
+      'Servicio de Asesoría de Inversiones',
+      'Prohibiciones y Obligaciones de los Asesores y Medidas Disciplinarias',
+      'Disposiciones de Carácter General: Operaciones con Valores',
+      'Atención a Clientes',
+      'Técnicas de Comunicación',
+    ],
   },
   {
     id: 'regulatorio',
     label: 'Regulatorio y Fiscal',
-    topics: ['Conceptos Fiscales','Marco Legal','Tesorería','Ética','PLD'],
+    topics: ['Conceptos Fiscales','Marco Legal','Tesorería','Ética','PLD — Prevención de Lavado de Dinero y Financiamiento al Terrorismo'],
   },
 ];
 
-const LETTERS = ['A','B','C','D','E'];
+const LETTERS = ['A','B','C','D','E','F'];
 
 function numberedQuestions(qs) {
-  // Assign 1-indexed numbers; letters come from option index
   return qs.map((q, i) => ({ ...q, number: i + 1 }));
 }
 
-function getAllowedTopics(levelId) {
-  return MATRIX.filter(m => m.levels.includes(levelId)).map(m => m.topic);
+// Topics that have at least one question whose `audiences` includes the level.
+function getAllowedTopics(levelId, bank) {
+  if (!levelId || !Array.isArray(bank)) return [];
+  const topics = new Set();
+  for (const q of bank) {
+    if (Array.isArray(q.audiences) && q.audiences.includes(levelId)) {
+      topics.add(q.topic);
+    }
+  }
+  return [...topics];
 }
 
-function getQuestionsForTopic(bank, topic) {
-  return bank.filter(q => q.topic === topic);
+// Questions matching the topic, optionally filtered to a specific role.
+function getQuestionsForTopic(bank, topic, levelId = null) {
+  return bank.filter(q => {
+    if (q.topic !== topic) return false;
+    if (levelId && !(Array.isArray(q.audiences) && q.audiences.includes(levelId))) return false;
+    return true;
+  });
 }
 
-Object.assign(window, { LEVELS, MATRIX, TOPIC_GROUPS, LETTERS, getAllowedTopics, getQuestionsForTopic, numberedQuestions });
+Object.assign(window, { LEVELS, TOPIC_GROUPS, LETTERS, getAllowedTopics, getQuestionsForTopic, numberedQuestions });

@@ -10,9 +10,15 @@ function shuffle(arr) {
   return a;
 }
 
-// Build an exam: given a selection of topics + count, pick N random questions, also shuffle options
-function buildExam(bank, { name, topics, count, shuffleOptions = true }) {
-  const pool = bank.filter(q => topics.includes(q.topic));
+// Build an exam: given a selection of topics + count, pick N random questions.
+// If a `level` is supplied, only questions whose `audiences` contain that level
+// are included in the pool.
+function buildExam(bank, { name, topics, count, shuffleOptions = true, level = null }) {
+  const pool = bank.filter(q => {
+    if (!topics.includes(q.topic)) return false;
+    if (level && !(Array.isArray(q.audiences) && q.audiences.includes(level))) return false;
+    return true;
+  });
   const selected = shuffle(pool).slice(0, Math.min(count, pool.length));
   const withShuffledOptions = selected.map(q => {
     if (!shuffleOptions) return q;
