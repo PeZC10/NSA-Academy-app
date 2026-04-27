@@ -31,7 +31,6 @@ const VISIBILITY = {
     { topic: 'Asesores Financieros y Bancos' },
     { topic: 'Asesor Independiente' },
     { topic: 'Matemáticas Financieras', subs: ['El Valor del Dinero en el Tiempo'] },
-    { topic: 'Calculadora Financiera' },
     { topic: 'Excel' },
     { topic: 'Economía', subs: ['Política Fiscal'] },
     { topic: 'Renta Fija', subs: ['Características de los Bonos'] },
