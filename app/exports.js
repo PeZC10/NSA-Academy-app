@@ -11,12 +11,12 @@ function shuffle(arr) {
 }
 
 // Build an exam: given a selection of topics + count, pick N random questions.
-// If a `level` is supplied, only questions whose `audiences` contain that level
-// are included in the pool.
+// If a `level` is supplied, only questions visible to that level (per the
+// VISIBILITY map in app.jsx) are included in the pool.
 function buildExam(bank, { name, topics, count, shuffleOptions = true, level = null }) {
   const pool = bank.filter(q => {
     if (!topics.includes(q.topic)) return false;
-    if (level && !(Array.isArray(q.audiences) && q.audiences.includes(level))) return false;
+    if (level && typeof isVisibleForLevel === 'function' && !isVisibleForLevel(q, level)) return false;
     return true;
   });
   const selected = shuffle(pool).slice(0, Math.min(count, pool.length));

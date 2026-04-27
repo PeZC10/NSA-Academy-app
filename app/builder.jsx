@@ -22,7 +22,7 @@ function ExamBuilder({ bank, open, onClose }) {
   const countByTopic = useMemoB(() => {
     const c = {};
     bank.forEach(q => {
-      if (selectedLevel && !(Array.isArray(q.audiences) && q.audiences.includes(selectedLevel))) return;
+      if (selectedLevel && !isVisibleForLevel(q, selectedLevel)) return;
       c[q.topic] = (c[q.topic] || 0) + 1;
     });
     return c;

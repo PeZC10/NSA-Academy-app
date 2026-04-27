@@ -34,7 +34,7 @@ function TopicList({ level, topics, bank, selectedTopic, onSelectTopic, query, s
   }, [topics]);
 
   const countFor = (topic) => bank.filter(q =>
-    q.topic === topic && Array.isArray(q.audiences) && q.audiences.includes(level)
+    q.topic === topic && isVisibleForLevel(q, level)
   ).length;
 
   const q = (query || '').toLowerCase().trim();
@@ -232,7 +232,7 @@ function App({ bank }) {
   const totalQuestions = bank.length;
   const levelQuestionCount = useMemo(() => {
     if (!level) return 0;
-    return bank.filter(q => Array.isArray(q.audiences) && q.audiences.includes(level)).length;
+    return bank.filter(q => isVisibleForLevel(q, level)).length;
   }, [level, bank]);
 
   return (
