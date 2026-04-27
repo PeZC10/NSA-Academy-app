@@ -29,9 +29,15 @@ const VISIBILITY = {
     { topic: 'Historia de NSC' },
     { topic: 'NSC Hoy' },
     { topic: 'Asesores Financieros y Bancos' },
+    { topic: 'Asesor Independiente' },
     { topic: 'Matemáticas Financieras', subs: ['El Valor del Dinero en el Tiempo'] },
+    { topic: 'Calculadora Financiera' },
+    { topic: 'Excel' },
+    { topic: 'Economía', subs: ['Política Fiscal'] },
     { topic: 'Renta Fija', subs: ['Características de los Bonos'] },
-    { topic: 'Renta Variable', subs: ['Importancia de la Renta Variable', 'Características de Renta Variable'] },
+    // null sub catches one legacy intro question on primary markets that
+    // wasn't tagged with a sub in the bank.
+    { topic: 'Renta Variable', subs: ['Importancia de la Renta Variable', 'Características de Renta Variable', 'Productos de Inversión en Renta Variable', null] },
     { topic: 'Conceptos Fiscales', subs: ['Persona Física y Persona Moral', 'Utilidad Fiscal y Costo de Adquisición', 'SIC, Estate Tax y ETFs UCITS'] },
     { topic: 'Imagen Corporativa' },
     { topic: 'Ética' },
