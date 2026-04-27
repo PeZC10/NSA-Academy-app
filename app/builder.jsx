@@ -7,6 +7,7 @@ function ExamBuilder({ bank, open, onClose }) {
   const [selectedLevel, setSelectedLevel] = useStateB('');
   const [selectedTopics, setSelectedTopics] = useStateB(new Set());
   const [count, setCount] = useStateB(20);
+  const [shuffleQs, setShuffleQs] = useStateB(true);
   const [shuffleOpts, setShuffleOpts] = useStateB(true);
   const [step, setStep] = useStateB('build'); // 'build' | 'export'
   const [exam, setExam] = useStateB(null);
@@ -56,6 +57,7 @@ function ExamBuilder({ bank, open, onClose }) {
       name: examName || `Examen NSC${selectedLevel ? ' · ' + LEVELS.find(l=>l.id===selectedLevel).name : ''}`,
       topics: [...selectedTopics],
       count,
+      shuffleQuestions: shuffleQs,
       shuffleOptions: shuffleOpts,
       level: selectedLevel || null,
     });
@@ -110,7 +112,11 @@ function ExamBuilder({ bank, open, onClose }) {
             <div>
               <div className="panel-eyebrow">Examen generado</div>
               <h2 className="eb-title">{exam.name}</h2>
-              <div className="eb-meta">{exam.questions.length} preguntas · {exam.topics.length} tema{exam.topics.length !== 1 ? 's' : ''} · Orden aleatorio</div>
+              <div className="eb-meta">
+                {exam.questions.length} preguntas · {exam.topics.length} tema{exam.topics.length !== 1 ? 's' : ''}
+                {exam.shuffleQuestions ? ' · Preguntas en orden aleatorio' : ' · Preguntas en orden original'}
+                {exam.shuffleOptions ? ' · Opciones aleatorias' : ' · Opciones en orden original'}
+              </div>
             </div>
             <button className="icon-btn" onClick={onClose} aria-label="Cerrar">✕</button>
           </header>
@@ -301,8 +307,12 @@ function ExamBuilder({ bank, open, onClose }) {
 
           <div className="eb-field">
             <label className="eb-check">
+              <input type="checkbox" checked={shuffleQs} onChange={e => setShuffleQs(e.target.checked)} />
+              <span>Aleatorizar el orden de las preguntas</span>
+            </label>
+            <label className="eb-check">
               <input type="checkbox" checked={shuffleOpts} onChange={e => setShuffleOpts(e.target.checked)} />
-              <span>Aleatorizar también el orden de opciones A/B/C/D</span>
+              <span>Aleatorizar el orden de opciones A/B/C/D dentro de cada pregunta</span>
             </label>
           </div>
         </div>
@@ -311,7 +321,7 @@ function ExamBuilder({ bank, open, onClose }) {
           <div className="eb-summary">
             {selectedTopics.size === 0
               ? 'Selecciona al menos un tema'
-              : `${effectiveCount} pregunta${effectiveCount !== 1 ? 's' : ''} aleatoria${effectiveCount !== 1 ? 's' : ''} de ${selectedTopics.size} tema${selectedTopics.size !== 1 ? 's' : ''}`}
+              : `${effectiveCount} pregunta${effectiveCount !== 1 ? 's' : ''}${shuffleQs ? ' aleatoria' + (effectiveCount !== 1 ? 's' : '') : ''} de ${selectedTopics.size} tema${selectedTopics.size !== 1 ? 's' : ''}`}
           </div>
           <div className="eb-foot-actions">
             <button className="ghost-btn" onClick={onClose}>Cancelar</button>

@@ -13,13 +13,14 @@ function shuffle(arr) {
 // Build an exam: given a selection of topics + count, pick N random questions.
 // If a `level` is supplied, only questions visible to that level (per the
 // VISIBILITY map in app.jsx) are included in the pool.
-function buildExam(bank, { name, topics, count, shuffleOptions = true, level = null }) {
+function buildExam(bank, { name, topics, count, shuffleQuestions = true, shuffleOptions = true, level = null }) {
   const pool = bank.filter(q => {
     if (!topics.includes(q.topic)) return false;
     if (level && typeof isVisibleForLevel === 'function' && !isVisibleForLevel(q, level)) return false;
     return true;
   });
-  const selected = shuffle(pool).slice(0, Math.min(count, pool.length));
+  const ordered = shuffleQuestions ? shuffle(pool) : pool;
+  const selected = ordered.slice(0, Math.min(count, pool.length));
   const withShuffledOptions = selected.map(q => {
     if (!shuffleOptions) return q;
     const shuffled = shuffle(q.options.map((o, i) => ({ ...o, origIndex: i })));
@@ -29,6 +30,8 @@ function buildExam(bank, { name, topics, count, shuffleOptions = true, level = n
     name: name || 'Examen NSC Academy',
     topics,
     questions: withShuffledOptions,
+    shuffleQuestions,
+    shuffleOptions,
     createdAt: new Date().toISOString(),
   };
 }
@@ -65,7 +68,7 @@ function crearExamenNSC() {
   var form = FormApp.create(${JSON.stringify(exam.name)});
   form.setIsQuiz(true);
   form.setDescription('Examen NSC Academy · ${exam.questions.length} preguntas · Cada pregunta vale 1 punto.');
-  form.setShuffleQuestions(false); // Las preguntas ya vienen en orden aleatorio
+  form.setShuffleQuestions(false); // Conservamos el orden definido en el archivo
   form.setCollectEmail(true);
   form.setLimitOneResponsePerUser(false);
 
