@@ -6,11 +6,12 @@ function ExamBuilder({ bank, open, onClose }) {
   const [examName, setExamName] = useStateB('');
   const [selectedLevel, setSelectedLevel] = useStateB('');
   const [selectedTopics, setSelectedTopics] = useStateB(new Set());
-  const [count, setCount] = useStateB(20);
+  // topicCounts: { [parent]: number } — how many questions to include from each selected topic.
+  const [topicCounts, setTopicCounts] = useStateB({});
   const [versions, setVersions] = useStateB(1);
   const [shuffleOpts, setShuffleOpts] = useStateB(true);
   const [step, setStep] = useStateB('build'); // 'build' | 'export'
-  const [exams, setExams] = useStateB([]); // always an array; length 1 for single-version
+  const [exams, setExams] = useStateB([]);
   const [exporting, setExporting] = useStateB(null);
 
   // Topics filtered by level (if level picked) else all parents with questions
@@ -19,7 +20,7 @@ function ExamBuilder({ bank, open, onClose }) {
     return getAllowedTopics(selectedLevel, bank);
   }, [selectedLevel, bank]);
 
-  // Per-parent counts respect the selected level so the chip numbers match the exam pool.
+  // Per-parent question counts in the bank (respecting the selected level).
   const countByTopic = useMemoB(() => {
     const c = {};
     bank.forEach(q => {
@@ -29,38 +30,101 @@ function ExamBuilder({ bank, open, onClose }) {
     return c;
   }, [bank, selectedLevel]);
 
-  const totalAvailable = useMemoB(() => {
-    return [...selectedTopics].reduce((sum, t) => sum + (countByTopic[t] || 0), 0);
-  }, [selectedTopics, countByTopic]);
+  // Sum of per-topic counts (clamped to availability), the total exam length.
+  const totalSelected = useMemoB(() => {
+    return [...selectedTopics].reduce((sum, t) =>
+      sum + Math.min(parseInt(topicCounts[t]) || 0, countByTopic[t] || 0), 0);
+  }, [selectedTopics, topicCounts, countByTopic]);
 
+  // When selecting/deselecting a topic, also seed/remove its per-topic count.
+  const DEFAULT_PER_TOPIC = 5;
   const toggleTopic = (t) => {
     setSelectedTopics(prev => {
       const n = new Set(prev);
-      if (n.has(t)) n.delete(t); else n.add(t);
+      if (n.has(t)) {
+        n.delete(t);
+        setTopicCounts(c => { const next = { ...c }; delete next[t]; return next; });
+      } else {
+        n.add(t);
+        setTopicCounts(c => ({ ...c, [t]: Math.min(DEFAULT_PER_TOPIC, countByTopic[t] || 0) }));
+      }
       return n;
     });
   };
 
   const selectAllGroup = (topics) => {
-    setSelectedTopics(prev => {
-      const n = new Set(prev);
-      const allIn = topics.every(t => n.has(t));
-      if (allIn) topics.forEach(t => n.delete(t));
-      else topics.forEach(t => n.add(t));
-      return n;
+    const allIn = topics.every(t => selectedTopics.has(t));
+    if (allIn) {
+      setSelectedTopics(prev => {
+        const n = new Set(prev);
+        topics.forEach(t => n.delete(t));
+        return n;
+      });
+      setTopicCounts(c => {
+        const next = { ...c };
+        topics.forEach(t => delete next[t]);
+        return next;
+      });
+    } else {
+      setSelectedTopics(prev => {
+        const n = new Set(prev);
+        topics.forEach(t => n.add(t));
+        return n;
+      });
+      setTopicCounts(c => {
+        const next = { ...c };
+        topics.forEach(t => {
+          if (!(t in next)) next[t] = Math.min(DEFAULT_PER_TOPIC, countByTopic[t] || 0);
+        });
+        return next;
+      });
+    }
+  };
+
+  const setTopicCount = (t, raw) => {
+    const max = countByTopic[t] || 0;
+    const n = Math.max(0, Math.min(max, parseInt(raw) || 0));
+    setTopicCounts(c => ({ ...c, [t]: n }));
+  };
+
+  const applyPerTopicPreset = (n) => {
+    setTopicCounts(c => {
+      const next = {};
+      [...selectedTopics].forEach(t => {
+        const max = countByTopic[t] || 0;
+        next[t] = n === 'all' ? max : Math.min(n, max);
+      });
+      return next;
     });
   };
 
+  // Reset per-topic counts to clamp against new max when level changes.
+  useEffectB(() => {
+    setTopicCounts(c => {
+      const next = {};
+      Object.keys(c).forEach(t => {
+        const max = countByTopic[t] || 0;
+        next[t] = Math.min(c[t], max);
+      });
+      return next;
+    });
+  }, [countByTopic]);
+
   const handleBuild = () => {
-    if (selectedTopics.size === 0 || count < 1) return;
+    if (selectedTopics.size === 0 || totalSelected < 1) return;
     const baseName = examName || `Examen NSC${selectedLevel ? ' · ' + LEVELS.find(l=>l.id===selectedLevel).name : ''}`;
     const built = [];
     const n = Math.max(1, parseInt(versions) || 1);
+    // Build the per-topic count map only with selected topics.
+    const counts = {};
+    [...selectedTopics].forEach(t => {
+      const v = Math.min(parseInt(topicCounts[t]) || 0, countByTopic[t] || 0);
+      if (v > 0) counts[t] = v;
+    });
     for (let i = 0; i < n; i++) {
       built.push(buildExam(bank, {
         name: n > 1 ? `${baseName} — v${i + 1}` : baseName,
-        topics: [...selectedTopics],
-        count,
+        topicCounts: counts,
         shuffleOptions: shuffleOpts,
         level: selectedLevel || null,
       }));
@@ -85,7 +149,8 @@ function ExamBuilder({ bank, open, onClose }) {
 
   if (!open) return null;
 
-  const effectiveCount = Math.min(count, totalAvailable);
+  const effectiveCount = totalSelected;
+  const canBuild = selectedTopics.size > 0 && totalSelected > 0;
 
   // ---- EXPORT STEP ----
   if (step === 'export' && exams.length > 0) {
@@ -291,37 +356,42 @@ function ExamBuilder({ bank, open, onClose }) {
             </div>
           </div>
 
-          <div className="eb-field eb-count-field">
-            <label className="eb-label">Número de preguntas</label>
-            <div className="count-row">
-              <input
-                type="number"
-                min="1"
-                max={Math.max(totalAvailable, 1)}
-                value={count}
-                onChange={e => setCount(Math.max(1, parseInt(e.target.value) || 1))}
-                className="eb-number"
-              />
-              <input
-                type="range"
-                min="1"
-                max={Math.max(totalAvailable, 1)}
-                value={effectiveCount}
-                onChange={e => setCount(parseInt(e.target.value))}
-                className="eb-range"
-                disabled={totalAvailable === 0}
-              />
-              <div className="count-avail">
-                de <strong>{totalAvailable}</strong> disponibles
+          <div className="eb-field">
+            <div className="eb-label-row">
+              <label className="eb-label">Preguntas por tema</label>
+              <div className="eb-quick">
+                <button className="tiny-btn" onClick={() => applyPerTopicPreset(5)} disabled={selectedTopics.size === 0}>5/tema</button>
+                <button className="tiny-btn" onClick={() => applyPerTopicPreset(10)} disabled={selectedTopics.size === 0}>10/tema</button>
+                <button className="tiny-btn" onClick={() => applyPerTopicPreset('all')} disabled={selectedTopics.size === 0}>Todas</button>
               </div>
             </div>
-            <div className="quick-counts">
-              {[10, 20, 30, 50, totalAvailable].filter((v, i, a) => v > 0 && a.indexOf(v) === i).map(v => (
-                <button key={v} className="tiny-btn" onClick={() => setCount(Math.min(v, totalAvailable))}>
-                  {v === totalAvailable ? `Todas (${v})` : v}
-                </button>
-              ))}
-            </div>
+            {selectedTopics.size === 0 ? (
+              <div className="topic-counts-empty">Selecciona uno o más temas para configurar la cantidad de preguntas.</div>
+            ) : (
+              <div className="topic-counts">
+                {[...selectedTopics].map(t => {
+                  const max = countByTopic[t] || 0;
+                  const v = Math.min(parseInt(topicCounts[t]) || 0, max);
+                  return (
+                    <div className="topic-count-row" key={t}>
+                      <span className="topic-count-name">{t}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={max}
+                        value={v}
+                        onChange={e => setTopicCount(t, e.target.value)}
+                        className="eb-number topic-count-input"
+                      />
+                      <span className="topic-count-max">/ {max}</span>
+                    </div>
+                  );
+                })}
+                <div className="topic-counts-total">
+                  Total: <strong>{totalSelected}</strong> pregunta{totalSelected !== 1 ? 's' : ''}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="eb-field">
@@ -367,7 +437,7 @@ function ExamBuilder({ bank, open, onClose }) {
             <button
               className="primary-btn"
               onClick={handleBuild}
-              disabled={selectedTopics.size === 0 || totalAvailable === 0}
+              disabled={!canBuild}
             >Generar {versions > 1 ? `${versions} versiones` : 'examen'} →</button>
           </div>
         </footer>

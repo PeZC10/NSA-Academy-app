@@ -10,17 +10,26 @@ function shuffle(arr) {
   return a;
 }
 
-// Build an exam: given a selection of parents + count, pick N random questions.
-// If a `level` is supplied, only questions whose audiences include that level
-// are included in the pool.
-function buildExam(bank, { name, topics, count, shuffleOptions = true, level = null }) {
-  const pool = bank.filter(q => {
-    if (!topics.includes(q.parent)) return false;
-    if (level && !(Array.isArray(q.audiences) && q.audiences.includes(level))) return false;
-    return true;
-  });
-  const selected = shuffle(pool).slice(0, Math.min(count, pool.length));
-  const withShuffledOptions = selected.map(q => {
+// Build an exam from a per-topic count map. `topicCounts` is { [parent]: number }.
+// For each topic the function samples up to N random questions filtered by the
+// selected level (if any), then merges and reshuffles so questions from
+// different topics are interleaved. If `shuffleOptions` is true, each
+// question's option order is independently shuffled.
+function buildExam(bank, { name, topicCounts, shuffleOptions = true, level = null }) {
+  const topics = Object.keys(topicCounts || {});
+  const sampled = [];
+  for (const topic of topics) {
+    const wanted = parseInt(topicCounts[topic]) || 0;
+    if (wanted < 1) continue;
+    const pool = bank.filter(q => {
+      if (q.parent !== topic) return false;
+      if (level && !(Array.isArray(q.audiences) && q.audiences.includes(level))) return false;
+      return true;
+    });
+    sampled.push(...shuffle(pool).slice(0, Math.min(wanted, pool.length)));
+  }
+  const finalQuestions = shuffle(sampled);
+  const withShuffledOptions = finalQuestions.map(q => {
     if (!shuffleOptions) return q;
     const shuffled = shuffle(q.options.map((o, i) => ({ ...o, origIndex: i })));
     return { ...q, options: shuffled };
@@ -75,10 +84,15 @@ function crearExamenesNSC() {
     form.setCollectEmail(true);
     form.setLimitOneResponsePerUser(false);
 
+    // First field: open-text input for the test taker's full name.
+    form.addTextItem()
+      .setTitle('Nombre completo del examinado')
+      .setRequired(true);
+
     for (var i = 0; i < ver.questions.length; i++) {
       var q = ver.questions[i];
       var item = form.addMultipleChoiceItem();
-      item.setTitle((i + 1) + '. ' + q.question);
+      item.setTitle((i + 2) + '. ' + q.question);
       item.setHelpText('Tema: ' + q.parent + (q.subtopic ? ' · ' + q.subtopic : ''));
       item.setPoints(1);
       item.setRequired(true);
@@ -126,9 +140,17 @@ async function toMicrosoftFormsDocx(exam) {
   // shows up inside the imported quiz as garbage entries.
   const children = [];
 
+  // First question: open-text input for the test taker's name.
+  // Forms' Quick Import detects a question as "open text" when it has no
+  // A./B./C./D. lines below it.
+  children.push(new Paragraph({
+    children: [new TextRun({ text: '1. Nombre completo del examinado', bold: true })],
+  }));
+  children.push(new Paragraph({ text: '' }));
+
   exam.questions.forEach((q, i) => {
     children.push(new Paragraph({
-      children: [new TextRun({ text: `${i + 1}. ${q.question}`, bold: true })],
+      children: [new TextRun({ text: `${i + 2}. ${q.question}`, bold: true })],
     }));
     let correctLetter = '';
     q.options.forEach((opt, j) => {
