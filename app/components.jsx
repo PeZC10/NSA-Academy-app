@@ -131,23 +131,53 @@ function QuestionCard({ q, index, revealed, onReveal }) {
 
 function QuestionsPanel({ level, topic, questions, allRevealed, setAllRevealed }) {
   const [revealedIds, setRevealedIds] = useState(new Set());
+  const [subFilter, setSubFilter] = useState(null); // null = show all subtopics
 
-  useEffect(() => { setRevealedIds(new Set()); }, [topic, level]);
+  // Reset reveals + subtopic filter whenever the user switches level or topic.
+  useEffect(() => {
+    setRevealedIds(new Set());
+    setSubFilter(null);
+  }, [topic, level]);
 
-  const toggleOne = (i) => {
+  // Distinct subtopics for this topic + level, with their counts.
+  const subtopics = useMemo(() => {
+    const counts = new Map();
+    for (const q of questions) {
+      const k = q.subtopic || '—';
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return [...counts.entries()].map(([name, count]) => ({ name, count }));
+  }, [questions]);
+
+  const displayed = useMemo(() => {
+    if (!subFilter) return questions;
+    return questions.filter(q => (q.subtopic || '—') === subFilter);
+  }, [questions, subFilter]);
+
+  // revealedIds is keyed by stable q.id (or fallback to question text if missing).
+  const idOf = (q) => q.id || q.question;
+
+  const toggleOne = (q) => {
+    const k = idOf(q);
     setRevealedIds(prev => {
       const s = new Set(prev);
-      if (s.has(i)) s.delete(i); else s.add(i);
+      if (s.has(k)) s.delete(k); else s.add(k);
       return s;
     });
   };
 
   const revealAll = () => {
-    if (revealedIds.size === questions.length) {
-      setRevealedIds(new Set());
-    } else {
-      setRevealedIds(new Set(questions.map((_, i) => i)));
-    }
+    const allKeys = displayed.map(idOf);
+    const allOpen = allKeys.length > 0 && allKeys.every(k => revealedIds.has(k));
+    setRevealedIds(prev => {
+      const s = new Set(prev);
+      if (allOpen) {
+        allKeys.forEach(k => s.delete(k));
+      } else {
+        allKeys.forEach(k => s.add(k));
+      }
+      return s;
+    });
   };
 
   if (!level) {
@@ -171,13 +201,13 @@ function QuestionsPanel({ level, topic, questions, allRevealed, setAllRevealed }
   }
 
   const lv = LEVELS.find(l => l.id === level);
-  const allOpen = revealedIds.size === questions.length && questions.length > 0;
+  const allOpen = displayed.length > 0 && displayed.every(q => revealedIds.has(idOf(q)));
 
   return (
     <div className="qpanel">
       <header className="qpanel-head">
         <div>
-          <div className="qpanel-crumb">{lv.name}  ·  {questions.length} {questions.length === 1 ? 'pregunta' : 'preguntas'}</div>
+          <div className="qpanel-crumb">{lv.name}  ·  {displayed.length} {displayed.length === 1 ? 'pregunta' : 'preguntas'}{subFilter ? ` · ${subFilter}` : ''}</div>
           <h2 className="qpanel-title">{topic}</h2>
         </div>
         {questions.length > 0 && (
@@ -192,6 +222,26 @@ function QuestionsPanel({ level, topic, questions, allRevealed, setAllRevealed }
         )}
       </header>
 
+      {subtopics.length > 1 && (
+        <div className="sub-filter">
+          <button
+            className={`sub-chip ${!subFilter ? 'is-on' : ''}`}
+            onClick={() => setSubFilter(null)}
+          >
+            Todos <span className="sub-chip-n">{questions.length}</span>
+          </button>
+          {subtopics.map(s => (
+            <button
+              key={s.name}
+              className={`sub-chip ${subFilter === s.name ? 'is-on' : ''}`}
+              onClick={() => setSubFilter(s.name)}
+            >
+              {s.name} <span className="sub-chip-n">{s.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {questions.length === 0 ? (
         <div className="no-questions">
           <div className="no-questions-dot" />
@@ -200,13 +250,13 @@ function QuestionsPanel({ level, topic, questions, allRevealed, setAllRevealed }
         </div>
       ) : (
         <div className="qlist">
-          {questions.map((q, i) => (
+          {displayed.map((q, i) => (
             <QuestionCard
               key={q.id || i}
               q={q}
               index={i}
-              revealed={revealedIds.has(i)}
-              onReveal={() => toggleOne(i)}
+              revealed={revealedIds.has(idOf(q))}
+              onReveal={() => toggleOne(q)}
             />
           ))}
         </div>

@@ -919,4 +919,43 @@ button {
   .qtext { font-size: 17px; }
 }
 
+/* ---------- Subtopic filter (right panel) ---------- */
+.sub-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: -12px 0 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px dashed var(--rule);
+}
+.sub-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: #fbf9f3;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  transition: all 0.1s ease;
+}
+.sub-chip:hover { border-color: var(--ink-3); }
+.sub-chip.is-on {
+  background: var(--navy);
+  color: #f4f1ea;
+  border-color: var(--navy);
+}
+.sub-chip-n {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  background: var(--paper-2);
+  padding: 0 5px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.sub-chip.is-on .sub-chip-n { background: rgba(255,255,255,0.15); color: #d9c79a; }
+@media print { .sub-filter { display: none !important; } }
+
 /* cache-bust */
