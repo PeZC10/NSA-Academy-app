@@ -33,8 +33,13 @@ jobs:
           node-version: '20'
           cache: npm
 
+      # Use `npm install` (not `npm ci`) so each runner can resolve its own
+      # platform-specific optional dependencies. The lockfile committed to the
+      # repo is generated on Linux and may legitimately omit Windows/macOS
+      # optionals (e.g. dmg-license is darwin-only); strict `npm ci` then fails
+      # on the other platforms.
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
