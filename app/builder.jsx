@@ -7,9 +7,10 @@ function ExamBuilder({ bank, open, onClose }) {
   const [selectedLevel, setSelectedLevel] = useStateB('');
   const [selectedTopics, setSelectedTopics] = useStateB(new Set());
   const [count, setCount] = useStateB(20);
+  const [versions, setVersions] = useStateB(1);
   const [shuffleOpts, setShuffleOpts] = useStateB(true);
   const [step, setStep] = useStateB('build'); // 'build' | 'export'
-  const [exam, setExam] = useStateB(null);
+  const [exams, setExams] = useStateB([]); // always an array; length 1 for single-version
   const [exporting, setExporting] = useStateB(null);
 
   // Topics filtered by level (if level picked) else all parents with questions
@@ -52,19 +53,24 @@ function ExamBuilder({ bank, open, onClose }) {
 
   const handleBuild = () => {
     if (selectedTopics.size === 0 || count < 1) return;
-    const e = buildExam(bank, {
-      name: examName || `Examen NSC${selectedLevel ? ' · ' + LEVELS.find(l=>l.id===selectedLevel).name : ''}`,
-      topics: [...selectedTopics],
-      count,
-      shuffleOptions: shuffleOpts,
-      level: selectedLevel || null,
-    });
-    setExam(e);
+    const baseName = examName || `Examen NSC${selectedLevel ? ' · ' + LEVELS.find(l=>l.id===selectedLevel).name : ''}`;
+    const built = [];
+    const n = Math.max(1, parseInt(versions) || 1);
+    for (let i = 0; i < n; i++) {
+      built.push(buildExam(bank, {
+        name: n > 1 ? `${baseName} — v${i + 1}` : baseName,
+        topics: [...selectedTopics],
+        count,
+        shuffleOptions: shuffleOpts,
+        level: selectedLevel || null,
+      }));
+    }
+    setExams(built);
     setStep('export');
   };
 
   const handleReset = () => {
-    setExam(null);
+    setExams([]);
     setStep('build');
   };
 
@@ -82,20 +88,32 @@ function ExamBuilder({ bank, open, onClose }) {
   const effectiveCount = Math.min(count, totalAvailable);
 
   // ---- EXPORT STEP ----
-  if (step === 'export' && exam) {
+  if (step === 'export' && exams.length > 0) {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const safeNameOf = (n) => (n || 'examen').replace(/[^a-z0-9áéíóúñ\- ]/gi, '').trim().replace(/\s+/g, '_');
+
     const doExport = async (kind) => {
       setExporting(kind);
       try {
-        const safeName = (exam.name || 'examen').replace(/[^a-z0-9áéíóúñ\- ]/gi, '').trim().replace(/\s+/g, '_');
         if (kind === 'gas') {
-          downloadText(toGoogleAppsScript(exam), `${safeName}.gs`, 'text/javascript');
+          // One .gs creating N forms — preferred even for N=1.
+          const baseName = exams[0].name.replace(/ — v\d+$/, '');
+          downloadText(toGoogleAppsScript(exams), `${safeNameOf(baseName)}.gs`, 'text/javascript');
         } else if (kind === 'msform') {
-          const blob = await toMicrosoftFormsDocx(exam);
-          downloadBlob(blob, `${safeName}.docx`);
+          // One .docx per version (Forms imports per file).
+          for (let i = 0; i < exams.length; i++) {
+            const blob = await toMicrosoftFormsDocx(exams[i]);
+            downloadBlob(blob, `${safeNameOf(exams[i].name)}.docx`);
+            if (i < exams.length - 1) await sleep(400);
+          }
         } else if (kind === 'csv') {
-          downloadText(toCSV(exam), `${safeName}.csv`, 'text/csv');
+          for (let i = 0; i < exams.length; i++) {
+            downloadText(toCSV(exams[i]), `${safeNameOf(exams[i].name)}.csv`, 'text/csv');
+            if (i < exams.length - 1) await sleep(400);
+          }
         } else if (kind === 'print') {
-          printViaIframe(toPrintableHTML(exam));
+          // All versions stacked in one document, page-break between.
+          printViaIframe(toPrintableHTML(exams));
         }
       } catch (err) {
         alert('Error al exportar: ' + err.message);
@@ -103,14 +121,17 @@ function ExamBuilder({ bank, open, onClose }) {
       setExporting(null);
     };
 
+    const headerExam = exams[0];
+    const headerName = exams.length === 1 ? headerExam.name : headerExam.name.replace(/ — v\d+$/, '');
+
     return (
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal eb-modal" onClick={e => e.stopPropagation()}>
           <header className="eb-head">
             <div>
-              <div className="panel-eyebrow">Examen generado</div>
-              <h2 className="eb-title">{exam.name}</h2>
-              <div className="eb-meta">{exam.questions.length} preguntas · {exam.topics.length} tema{exam.topics.length !== 1 ? 's' : ''} · Orden aleatorio</div>
+              <div className="panel-eyebrow">{exams.length === 1 ? 'Examen generado' : `${exams.length} versiones generadas`}</div>
+              <h2 className="eb-title">{headerName}</h2>
+              <div className="eb-meta">{headerExam.questions.length} preguntas · {headerExam.topics.length} tema{headerExam.topics.length !== 1 ? 's' : ''} · Orden aleatorio{exams.length > 1 ? ` · ${exams.length} versiones` : ''}</div>
             </div>
             <button className="icon-btn" onClick={onClose} aria-label="Cerrar">✕</button>
           </header>
@@ -159,9 +180,13 @@ function ExamBuilder({ bank, open, onClose }) {
             </div>
 
             <details className="exam-preview">
-              <summary>Ver preguntas incluidas ({exam.questions.length})</summary>
+              <summary>
+                {exams.length === 1
+                  ? `Ver preguntas incluidas (${exams[0].questions.length})`
+                  : `Ver preguntas de la versión 1 (${exams[0].questions.length}) — las otras versiones tienen el mismo pool en distinto orden`}
+              </summary>
               <ol className="preview-list">
-                {exam.questions.map((q, i) => (
+                {exams[0].questions.map((q, i) => (
                   <li key={q.id || i}>
                     <div className="pv-q">{q.question}</div>
                     <div className="pv-meta">{q.parent}{q.subtopic ? ` · ${q.subtopic}` : ''}</div>
@@ -300,6 +325,30 @@ function ExamBuilder({ bank, open, onClose }) {
           </div>
 
           <div className="eb-field">
+            <label className="eb-label">Versiones del examen</label>
+            <div className="count-row">
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={versions}
+                onChange={e => setVersions(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                className="eb-number"
+              />
+              <div className="count-avail">
+                {versions === 1
+                  ? 'Una sola versión.'
+                  : `${versions} versiones — mismo pool de preguntas, distinto orden de preguntas y opciones en cada una. Útil para evitar copia entre examinados.`}
+              </div>
+            </div>
+            <div className="quick-counts">
+              {[1, 2, 3, 5, 10].map(v => (
+                <button key={v} className="tiny-btn" onClick={() => setVersions(v)}>{v}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="eb-field">
             <label className="eb-check">
               <input type="checkbox" checked={shuffleOpts} onChange={e => setShuffleOpts(e.target.checked)} />
               <span>Aleatorizar también el orden de opciones A/B/C/D</span>
@@ -311,7 +360,7 @@ function ExamBuilder({ bank, open, onClose }) {
           <div className="eb-summary">
             {selectedTopics.size === 0
               ? 'Selecciona al menos un tema'
-              : `${effectiveCount} pregunta${effectiveCount !== 1 ? 's' : ''} aleatoria${effectiveCount !== 1 ? 's' : ''} de ${selectedTopics.size} tema${selectedTopics.size !== 1 ? 's' : ''}`}
+              : `${effectiveCount} pregunta${effectiveCount !== 1 ? 's' : ''} aleatoria${effectiveCount !== 1 ? 's' : ''} de ${selectedTopics.size} tema${selectedTopics.size !== 1 ? 's' : ''}${versions > 1 ? ` · ${versions} versiones` : ''}`}
           </div>
           <div className="eb-foot-actions">
             <button className="ghost-btn" onClick={onClose}>Cancelar</button>
@@ -319,7 +368,7 @@ function ExamBuilder({ bank, open, onClose }) {
               className="primary-btn"
               onClick={handleBuild}
               disabled={selectedTopics.size === 0 || totalAvailable === 0}
-            >Generar examen →</button>
+            >Generar {versions > 1 ? `${versions} versiones` : 'examen'} →</button>
           </div>
         </footer>
       </div>

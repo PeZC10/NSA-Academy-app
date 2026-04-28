@@ -34,64 +34,67 @@ function buildExam(bank, { name, topics, count, shuffleOptions = true, level = n
 }
 
 // ---- Google Apps Script generator ----
-// Produces a .gs file that the user pastes into script.google.com
-// which creates a Google Form quiz with all questions + correct answers.
-function toGoogleAppsScript(exam) {
-  const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-  const questionsJson = JSON.stringify(exam.questions.map(q => ({
-    id: q.id,
-    question: q.question,
-    parent: q.parent,
-    subtopic: q.subtopic,
-    options: q.options.map(o => ({ text: o.text, correct: o.correct })),
+// Accepts a single exam or an array of versions. The generated .gs creates
+// one Google Form per version when an array is provided, all in a single run.
+function toGoogleAppsScript(examOrArray) {
+  const exams = Array.isArray(examOrArray) ? examOrArray : [examOrArray];
+  const versionsJson = JSON.stringify(exams.map(exam => ({
+    name: exam.name,
+    questions: exam.questions.map(q => ({
+      id: q.id,
+      question: q.question,
+      parent: q.parent,
+      subtopic: q.subtopic,
+      options: q.options.map(o => ({ text: o.text, correct: o.correct })),
+    })),
   })), null, 2);
 
   return `/**
- * NSC Academy — Generador de Google Form
+ * NSC Academy — Generador de Google Form${exams.length > 1 ? 's' : ''}
  *
  * Instrucciones:
  * 1. Abre https://script.google.com y crea un nuevo proyecto.
  * 2. Pega TODO este código reemplazando el contenido por defecto.
  * 3. Haz clic en "Ejecutar" (▶ Run). Autoriza los permisos cuando te los pida.
- * 4. Al terminar, revisa "Ver logs" (Ctrl/Cmd + Enter) para ver el link del Form.
+ * 4. Al terminar, revisa "Ver logs" (Ctrl/Cmd + Enter) para ver los links.
  *
- * Examen generado: ${esc(exam.name)}
- * Preguntas: ${exam.questions.length}
- * Temas: ${exam.topics.join(', ')}
- * Generado: ${exam.createdAt}
+ * Versiones: ${exams.length}
+ * Preguntas por versión: ${exams[0].questions.length}
+ * Generado: ${exams[0].createdAt}
  */
 
-function crearExamenNSC() {
-  var examData = ${questionsJson};
+function crearExamenesNSC() {
+  var versions = ${versionsJson};
 
-  var form = FormApp.create(${JSON.stringify(exam.name)});
-  form.setIsQuiz(true);
-  form.setDescription('Examen NSC Academy · ${exam.questions.length} preguntas · Cada pregunta vale 1 punto.');
-  form.setShuffleQuestions(false); // Las preguntas ya vienen en orden aleatorio
-  form.setCollectEmail(true);
-  form.setLimitOneResponsePerUser(false);
+  for (var v = 0; v < versions.length; v++) {
+    var ver = versions[v];
+    var form = FormApp.create(ver.name);
+    form.setIsQuiz(true);
+    form.setDescription('Examen NSC Academy · ' + ver.questions.length + ' preguntas · Cada pregunta vale 1 punto.');
+    form.setShuffleQuestions(false);
+    form.setCollectEmail(true);
+    form.setLimitOneResponsePerUser(false);
 
-  for (var i = 0; i < examData.length; i++) {
-    var q = examData[i];
-    var item = form.addMultipleChoiceItem();
-    item.setTitle((i + 1) + '. ' + q.question);
-    item.setHelpText('Tema: ' + q.parent + (q.subtopic ? " · " + q.subtopic : ""));
-    item.setPoints(1);
-    item.setRequired(true);
+    for (var i = 0; i < ver.questions.length; i++) {
+      var q = ver.questions[i];
+      var item = form.addMultipleChoiceItem();
+      item.setTitle((i + 1) + '. ' + q.question);
+      item.setHelpText('Tema: ' + q.parent + (q.subtopic ? ' · ' + q.subtopic : ''));
+      item.setPoints(1);
+      item.setRequired(true);
 
-    var choices = [];
-    for (var j = 0; j < q.options.length; j++) {
-      var opt = q.options[j];
-      choices.push(item.createChoice(opt.text, opt.correct === true));
+      var choices = [];
+      for (var j = 0; j < q.options.length; j++) {
+        var opt = q.options[j];
+        choices.push(item.createChoice(opt.text, opt.correct === true));
+      }
+      item.setChoices(choices);
     }
-    item.setChoices(choices);
-  }
 
-  var url = form.getPublishedUrl();
-  var editUrl = form.getEditUrl();
-  Logger.log('✅ Examen creado exitosamente');
-  Logger.log('📝 Link para editar: ' + editUrl);
-  Logger.log('🔗 Link para compartir: ' + url);
+    Logger.log('✅ ' + ver.name);
+    Logger.log('   📝 Editar: ' + form.getEditUrl());
+    Logger.log('   🔗 Compartir: ' + form.getPublishedUrl());
+  }
 }
 `;
 }
@@ -114,37 +117,14 @@ async function toMicrosoftFormsDocx(exam) {
       document.head.appendChild(s);
     });
   }
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = window.docx;
+  const { Document, Packer, Paragraph, TextRun } = window.docx;
   const LETTERS = ['A','B','C','D','E','F'];
 
+  // Important: we deliberately do NOT include any title, instructions, or
+  // metadata paragraphs here. Microsoft Forms' Quick Import treats every
+  // non-question paragraph as a question, so any human-readable preamble
+  // shows up inside the imported quiz as garbage entries.
   const children = [];
-
-  children.push(new Paragraph({
-    text: exam.name,
-    heading: HeadingLevel.HEADING_1,
-  }));
-  children.push(new Paragraph({
-    children: [new TextRun({ text: `${exam.questions.length} preguntas · Temas: ${exam.topics.join(', ')}`, italics: true, size: 20 })],
-  }));
-  children.push(new Paragraph({ text: '' }));
-  children.push(new Paragraph({
-    children: [new TextRun({ text: 'Instrucciones para importar a Microsoft Forms:', bold: true, size: 20 })],
-  }));
-  children.push(new Paragraph({
-    children: [new TextRun({ text: '1. Abre https://forms.office.com y crea un nuevo Quiz (Cuestionario).', size: 20 })],
-  }));
-  children.push(new Paragraph({
-    children: [new TextRun({ text: '2. Clic en "Importación rápida" (Quick Import) y selecciona este archivo .docx.', size: 20 })],
-  }));
-  children.push(new Paragraph({
-    children: [new TextRun({ text: '3. Forms detectará las preguntas como opción múltiple gracias a los prefijos A./B./C./D.', size: 20 })],
-  }));
-  children.push(new Paragraph({
-    children: [new TextRun({ text: '4. Revisa las respuestas correctas (indicadas en las líneas "Answer:") y márcalas en Forms si es necesario.', size: 20 })],
-  }));
-  children.push(new Paragraph({ text: '' }));
-  children.push(new Paragraph({ text: '— — — — — — — — — —' }));
-  children.push(new Paragraph({ text: '' }));
 
   exam.questions.forEach((q, i) => {
     children.push(new Paragraph({
@@ -225,10 +205,15 @@ function toCSV(exam) {
 }
 
 // ---- Printable HTML generator ----
-function toPrintableHTML(exam, { includeAnswerKey = true } = {}) {
+// Accepts a single exam or an array of versions. With multiple versions the
+// document stacks all of them in one HTML, page-break between, and emits one
+// answer key per version (page-break before each).
+function toPrintableHTML(examOrArray, { includeAnswerKey = true } = {}) {
+  const exams = Array.isArray(examOrArray) ? examOrArray : [examOrArray];
   const esc = (s) => String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&/g, '&amp;');
   const LETTERS = ['A','B','C','D','E'];
-  let html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${esc(exam.name)}</title>
+  const docTitle = exams.length === 1 ? exams[0].name : `${exams[0].name.replace(/ — v\d+$/, '')} (${exams.length} versiones)`;
+  let html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${esc(docTitle)}</title>
   <style>
     body { font-family: Georgia, serif; max-width: 760px; margin: 40px auto; padding: 0 40px; color: #1a2231; line-height: 1.4; }
     h1 { font-size: 24px; margin: 0 0 6px; }
@@ -242,29 +227,33 @@ function toPrintableHTML(exam, { includeAnswerKey = true } = {}) {
     .ans h2 { font-size: 18px; }
     .ans table { border-collapse: collapse; font-family: monospace; font-size: 12px; }
     .ans td { padding: 4px 12px; border: 1px solid #d7cfbd; }
+    .version-break { page-break-before: always; }
     @media print { body { margin: 0; padding: 20px; } }
-  </style></head><body>
-  <h1>${esc(exam.name)}</h1>
-  <div class="meta">${exam.questions.length} preguntas · Cada pregunta vale 1 punto · Temas: ${esc(exam.topics.join(', '))}</div>
-  <p><strong>Nombre:</strong> _________________________________  &nbsp;&nbsp; <strong>Fecha:</strong> _______________</p>
-  <hr>`;
-  exam.questions.forEach((q, i) => {
-    html += `<div class="q"><div class="qn">${i+1}. ${esc(q.question)}</div><ul class="opts">`;
-    q.options.forEach((o, j) => {
-      html += `<li><span class="lt">${LETTERS[j]}.</span><span>${esc(o.text)}</span></li>`;
-    });
-    html += `</ul></div>`;
-  });
-  if (includeAnswerKey) {
-    html += `<div class="ans"><h2>Hoja de respuestas</h2><table><tbody><tr>`;
+  </style></head><body>`;
+  exams.forEach((exam, vIdx) => {
+    if (vIdx > 0) html += `<div class="version-break"></div>`;
+    html += `<h1>${esc(exam.name)}</h1>
+    <div class="meta">${exam.questions.length} preguntas · Cada pregunta vale 1 punto · Temas: ${esc(exam.topics.join(', '))}</div>
+    <p><strong>Nombre:</strong> _________________________________  &nbsp;&nbsp; <strong>Fecha:</strong> _______________</p>
+    <hr>`;
     exam.questions.forEach((q, i) => {
-      const idx = q.options.findIndex(o => o.correct);
-      const letter = LETTERS[idx] || '?';
-      html += `<td>${i+1}. <strong>${letter}</strong></td>`;
-      if ((i+1) % 5 === 0) html += `</tr><tr>`;
+      html += `<div class="q"><div class="qn">${i+1}. ${esc(q.question)}</div><ul class="opts">`;
+      q.options.forEach((o, j) => {
+        html += `<li><span class="lt">${LETTERS[j]}.</span><span>${esc(o.text)}</span></li>`;
+      });
+      html += `</ul></div>`;
     });
-    html += `</tr></tbody></table></div>`;
-  }
+    if (includeAnswerKey) {
+      html += `<div class="ans"><h2>Hoja de respuestas — ${esc(exam.name)}</h2><table><tbody><tr>`;
+      exam.questions.forEach((q, i) => {
+        const idx = q.options.findIndex(o => o.correct);
+        const letter = LETTERS[idx] || '?';
+        html += `<td>${i+1}. <strong>${letter}</strong></td>`;
+        if ((i+1) % 5 === 0) html += `</tr><tr>`;
+      });
+      html += `</tr></tbody></table></div>`;
+    }
+  });
   html += `</body></html>`;
   return html;
 }
