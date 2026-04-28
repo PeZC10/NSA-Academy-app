@@ -12,18 +12,18 @@ function ExamBuilder({ bank, open, onClose }) {
   const [exam, setExam] = useStateB(null);
   const [exporting, setExporting] = useStateB(null);
 
-  // Topics filtered by level (if level picked) else all topics with questions
+  // Topics filtered by level (if level picked) else all parents with questions
   const availableTopics = useMemoB(() => {
-    if (!selectedLevel) return [...new Set(bank.map(q => q.topic))];
+    if (!selectedLevel) return [...new Set(bank.map(q => q.parent))];
     return getAllowedTopics(selectedLevel, bank);
   }, [selectedLevel, bank]);
 
-  // Per-topic counts respect the selected level so the chip numbers match the exam pool.
+  // Per-parent counts respect the selected level so the chip numbers match the exam pool.
   const countByTopic = useMemoB(() => {
     const c = {};
     bank.forEach(q => {
       if (selectedLevel && !isVisibleForLevel(q, selectedLevel)) return;
-      c[q.topic] = (c[q.topic] || 0) + 1;
+      c[q.parent] = (c[q.parent] || 0) + 1;
     });
     return c;
   }, [bank, selectedLevel]);
@@ -162,9 +162,9 @@ function ExamBuilder({ bank, open, onClose }) {
               <summary>Ver preguntas incluidas ({exam.questions.length})</summary>
               <ol className="preview-list">
                 {exam.questions.map((q, i) => (
-                  <li key={i}>
+                  <li key={q.id || i}>
                     <div className="pv-q">{q.question}</div>
-                    <div className="pv-meta">{q.topic}</div>
+                    <div className="pv-meta">{q.parent}{q.subtopic ? ` · ${q.subtopic}` : ''}</div>
                   </li>
                 ))}
               </ol>

@@ -10,13 +10,13 @@ function shuffle(arr) {
   return a;
 }
 
-// Build an exam: given a selection of topics + count, pick N random questions.
-// If a `level` is supplied, only questions visible to that level (per the
-// VISIBILITY map in app.jsx) are included in the pool.
+// Build an exam: given a selection of parents + count, pick N random questions.
+// If a `level` is supplied, only questions whose audiences include that level
+// are included in the pool.
 function buildExam(bank, { name, topics, count, shuffleOptions = true, level = null }) {
   const pool = bank.filter(q => {
-    if (!topics.includes(q.topic)) return false;
-    if (level && typeof isVisibleForLevel === 'function' && !isVisibleForLevel(q, level)) return false;
+    if (!topics.includes(q.parent)) return false;
+    if (level && !(Array.isArray(q.audiences) && q.audiences.includes(level))) return false;
     return true;
   });
   const selected = shuffle(pool).slice(0, Math.min(count, pool.length));
@@ -39,8 +39,10 @@ function buildExam(bank, { name, topics, count, shuffleOptions = true, level = n
 function toGoogleAppsScript(exam) {
   const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   const questionsJson = JSON.stringify(exam.questions.map(q => ({
+    id: q.id,
     question: q.question,
-    topic: q.topic,
+    parent: q.parent,
+    subtopic: q.subtopic,
     options: q.options.map(o => ({ text: o.text, correct: o.correct })),
   })), null, 2);
 
@@ -73,7 +75,7 @@ function crearExamenNSC() {
     var q = examData[i];
     var item = form.addMultipleChoiceItem();
     item.setTitle((i + 1) + '. ' + q.question);
-    item.setHelpText('Tema: ' + q.topic);
+    item.setHelpText('Tema: ' + q.parent + (q.subtopic ? " · " + q.subtopic : ""));
     item.setPoints(1);
     item.setRequired(true);
 
@@ -211,13 +213,13 @@ function toCSV(exam) {
     return str;
   };
   const lines = [];
-  lines.push(['#', 'Tema', 'Pregunta', 'Opción A', 'Opción B', 'Opción C', 'Opción D', 'Correcta'].map(escapeCsv).join(','));
+  lines.push(['#', 'ID', 'Tema', 'Subtema', 'Pregunta', 'Opción A', 'Opción B', 'Opción C', 'Opción D', 'Correcta'].map(escapeCsv).join(','));
   exam.questions.forEach((q, i) => {
     const opts = q.options.map(o => o.text);
     while (opts.length < 4) opts.push('');
     const correctIdx = q.options.findIndex(o => o.correct);
     const correctLetter = ['A','B','C','D','E'][correctIdx] || '';
-    lines.push([i + 1, q.topic, q.question, ...opts.slice(0, 4), correctLetter].map(escapeCsv).join(','));
+    lines.push([i + 1, q.id || '', q.parent, q.subtopic || '', q.question, ...opts.slice(0, 4), correctLetter].map(escapeCsv).join(','));
   });
   return lines.join('\n');
 }

@@ -33,8 +33,8 @@ function TopicList({ level, topics, bank, selectedTopic, onSelectTopic, query, s
     })).filter(g => g.topics.length > 0);
   }, [topics]);
 
-  const countFor = (topic) => bank.filter(q =>
-    q.topic === topic && isVisibleForLevel(q, level)
+  const countFor = (parent) => bank.filter(q =>
+    q.parent === parent && isVisibleForLevel(q, level)
   ).length;
 
   const q = (query || '').toLowerCase().trim();
@@ -124,7 +124,7 @@ function QuestionCard({ q, index, revealed, onReveal }) {
           );
         })}
       </ol>
-      {q.sub && <div className="qsub">Sección: {q.sub}</div>}
+      {q.subtopic && <div className="qsub">Sección: {q.subtopic}</div>}
     </article>
   );
 }
@@ -202,7 +202,7 @@ function QuestionsPanel({ level, topic, questions, allRevealed, setAllRevealed }
         <div className="qlist">
           {questions.map((q, i) => (
             <QuestionCard
-              key={i}
+              key={q.id || i}
               q={q}
               index={i}
               revealed={revealedIds.has(i)}
